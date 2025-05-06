@@ -325,44 +325,48 @@ else:
     st.sidebar.write(f"Courts: {st.session_state.num_courts}")
     st.sidebar.write(f"Current Round: {st.session_state.current_round_index}")
 
-    # --- Display Initial Court Assignments (after tournament starts, before round display) ---
-    if st.session_state.tournament_started and st.session_state.current_round_index == 1:
+    # --- Display Initial Court Assignments Summary (after tournament starts, before round display) ---
+    if st.session_state.tournament_started and st.session_state.current_round_index == 1 and not st.session_state.round_winners_in_progress:
         st.header("Initial Court Assignments (Round 1)")
-        st.write("Here are the court assignments for the first round:")
+        st.write("Here is the court assignment summary for the first round:")
         st.write("---") # Separator before the list
 
-        # Sort items by court number for clearer display
-        sorted_r1_items = sorted(st.session_state.current_round_items, key=lambda x: x.get('court', float('inf')))
-
-        for i, item in enumerate(sorted_r1_items):
+        # Group items by court number
+        court_assignments_summary = {}
+        for item in st.session_state.current_round_items:
             court = item.get('court')
-            item_type = item.get('type')
-
             if court is not None:
-                st.subheader(f"**Court {court}**")
+                if court not in court_assignments_summary:
+                    court_assignments_summary[court] = []
 
+                item_type = item.get('type')
                 if item_type == 'bye':
                     team = item.get('team')
                     if team:
-                        st.write(f"**{team}** gets a BYE") # Just show the team and bye status
-                    else:
-                        st.warning(f"Details missing for bye entry {i+1}.")
+                        court_assignments_summary[court].append(f"{team} (BYE)")
                 elif item_type == 'match':
                     teams = item.get('teams')
                     if teams is not None and isinstance(teams, list) and len(teams) >= 2:
-                        st.write(f"**{teams[0]}** vs **{teams[1]}**") # Just show the teams playing
-                    else:
-                        st.warning(f"Details missing or invalid for match {i+1}.")
-                else:
-                    st.warning(f"Unknown item type encountered for item {i+1}.")
+                        court_assignments_summary[court].extend(teams) # Add both teams to the list
 
-                st.write("---") # Separator after each court assignment
+        # Display the summary by court number
+        if court_assignments_summary:
+            # Sort courts numerically for cleaner display
+            for court_num in sorted(court_assignments_summary.keys()):
+                teams_on_court = court_assignments_summary[court_num]
+                if teams_on_court:
+                    st.write(f"**Court {court_num}:** {', '.join(teams_on_court)}")
+                else:
+                     st.write(f"**Court {court_num}:** No assignments") # Should not happen with current logic
+
+        st.write("---") # Separator after the summary
+        st.write("Scroll down to select winners for Round 1.") # Guide the user
 
 
 # Tournament in progress
 if st.session_state.tournament_started and not st.session_state.tournament_finished:
-    # Only display the interactive round details if it's not the initial view
-    if st.session_state.current_round_index > 1 or (st.session_state.current_round_index == 1 and st.session_state.round_winners_in_progress):
+    # Display the interactive round details below the initial summary
+    if st.session_state.current_round_index >= 1: # Always show interactive round details once tournament starts
          current_round_winners, all_winners_selected = display_current_round()
 
          # Recalculate num_actual_matches_in_round based on the items successfully processed
@@ -375,18 +379,6 @@ if st.session_state.tournament_started and not st.session_state.tournament_finis
                  st.rerun()
          elif num_actual_matches_in_round > 0 and not all_winners_selected:
              st.info("Please select winners for all matches to advance.")
-    elif st.session_state.tournament_started and st.session_state.current_round_index == 1 and not st.session_state.round_winners_in_progress:
-         # If R1 is started but no winners selected yet, show the interactive display
-         current_round_winners, all_winners_selected = display_current_round()
-
-         num_actual_matches_in_round = sum(1 for item in st.session_state.current_round_items if item.get('type') == 'match' and item.get('teams') is not None and isinstance(item.get('teams'), list) and len(item.get('teams')) >= 2)
-
-         if all_winners_selected and num_actual_matches_in_round > 0:
-              if st.button("Advance to Next Round"):
-                  advance_to_next_round_structured(current_round_winners)
-                  st.rerun()
-         elif num_actual_matches_in_round > 0 and not all_winners_selected:
-              st.info("Please select winners for all matches to advance.")
 
 
 # Tournament finished
