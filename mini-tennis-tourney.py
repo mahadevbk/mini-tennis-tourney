@@ -26,15 +26,13 @@ def generate_tournament_layout(num_teams, num_courts):
     """
     error_message = None
     team_assignments = {}
-    semi_final_pairings = []
-    final_pairing = ()
 
     if not 8 <= num_teams <= 16:
         error_message = "Number of teams must be between 8 and 16."
-        return team_assignments, semi_final_pairings, final_pairing, error_message
+        return team_assignments, error_message
     if not 2 <= num_courts <= 4:
         error_message = "Number of courts must be between 2 and 4."
-        return team_assignments, semi_final_pairings, final_pairing, error_message
+        return team_assignments, error_message
 
     teams = [f"Team {i+1}" for i in range(num_teams)]
     random.shuffle(teams)
@@ -197,67 +195,84 @@ def main():
         else:
             st.success("Tournament layout generated successfully!")
 
+            # Use st.session_state to store winners
+            if "court_winners" not in st.session_state:
+                st.session_state.court_winners = [None] * num_courts
+
             # Collect court winners
-            court_winners = []
             for court in range(1, num_courts + 1):
                 st.subheader(f"Court {court} Results")
                 # Ensure that the selectbox options are only the teams playing on that court
                 winner = st.selectbox(
-                    f"Winner of Court {court}:", team_assignments[court]
+                    f"Winner of Court {court}:",
+                    team_assignments[court],
+                    index=(
+                        team_assignments[court].index(st.session_state.court_winners[court - 1])
+                        if st.session_state.court_winners[court - 1]
+                        else 0
+                    ),
+                    key=f"court_winner_{court}",  # Unique key for each selectbox
                 )
-                court_winners.append(winner)
+                st.session_state.court_winners[court - 1] = winner
 
-            # Determine Semi-Finals
-            semi_final_pairings = determine_semi_finals(court_winners)
-            semi_final_winners = []
+            # Check if all court winners have been selected
+            if all(st.session_state.court_winners):
+                # Determine Semi-Finals
+                semi_final_pairings = determine_semi_finals(st.session_state.court_winners)
+                semi_final_winners = []
 
-            # Display Semi-Finals and collect winners
-            st.subheader("Semi-Final Results")
-            if semi_final_pairings:
-                for i, (team1, team2) in enumerate(semi_final_pairings):
-                    if "Bye" not in (team1, team2):
-                        winner = st.selectbox(
-                            f"Winner of Semi-Final {i + 1} ({team1} vs {team2}):",
-                            [team1, team2],
-                        )
-                        semi_final_winners.append(winner)
-                    else:
-                        semi_final_winners.append(
-                            team1 if team1 != "Bye" else team2
-                        )  # Add the non-"Bye" team
+                # Display Semi-Finals and collect winners
+                st.subheader("Semi-Final Results")
+                if semi_final_pairings:
+                    for i, (team1, team2) in enumerate(semi_final_pairings):
+                        if "Bye" not in (team1, team2):
+                            winner = st.selectbox(
+                                f"Winner of Semi-Final {i + 1} ({team1} vs {team2}):",
+                                [team1, team2],
+                                key=f"semi_final_winner_{i}",  # Unique key
+                            )
+                            semi_final_winners.append(winner)
+                        else:
+                            winner = team1 if team1 != "Bye" else team2
+                            st.write(f"Winner of Semi-Final {i + 1} ({team1} vs {team2}): {winner}")
+                            semi_final_winners.append(winner)
+
+                else:
+                    st.write("N/A")
+
+                # Determine Finals
+                final_pairing = determine_final_pairing(semi_final_winners)
+
+                # Generate and Download PDF
+                pdf_buffer = create_pdf_layout(
+                    team_assignments, semi_final_pairings, final_pairing, num_courts
+                )
+                st.download_button(
+                    label="Download Tournament Layout (PDF)",
+                    data=pdf_buffer,
+                    file_name="tournament_layout.pdf",
+                    mime="application/pdf",
+                )
+
+                # Display layout in Streamlit
+                st.subheader("Team Assignments:")
+                for court, teams in team_assignments.items():
+                    st.write(f"Court {court}: {', '.join(teams)}")
+
+                st.subheader("Semi-Final Pairings:")
+                if semi_final_pairings:
+                    for pairing in semi_final_pairings:
+                        st.write(f"{pairing[0]} vs {pairing[1]}")
+                else:
+                    st.write("N/A")
+
+                st.subheader("Final Pairing:")
+                if final_pairing:
+                    st.write(f"{final_pairing[0]} vs {final_pairing[1]}")
+                else:
+                    st.write("N/A")
             else:
-                st.write("N/A")
-
-            # Determine Finals
-            final_pairing = determine_final_pairing(semi_final_winners)
-
-            # Generate and Download PDF
-            pdf_buffer = create_pdf_layout(
-                team_assignments, semi_final_pairings, final_pairing, num_courts
-            )
-            st.download_button(
-                label="Download Tournament Layout (PDF)",
-                data=pdf_buffer,
-                file_name="tournament_layout.pdf",
-                mime="application/pdf",
-            )
-
-            # Display layout in Streamlit
-            st.subheader("Team Assignments:")
-            for court, teams in team_assignments.items():
-                st.write(f"Court {court}: {', '.join(teams)}")
-
-            st.subheader("Semi-Final Pairings:")
-            if semi_final_pairings:
-                for pairing in semi_final_pairings:
-                    st.write(f"{pairing[0]} vs {pairing[1]}")
-            else:
-                st.write("N/A")
-
-            st.subheader("Final Pairing:")
-            if final_pairing:
-                st.write(f"{final_pairing[0]} vs {final_pairing[1]}")
-            else:
-                st.write("N/A")
+                st.write("Please select the winner for all courts.")
 if __name__ == "__main__":
     main()
+
