@@ -326,10 +326,4 @@ elif st.session_state.tournament_finished:
 
 
 # --- Reset Button ---
-if st.session_state.tournament_started or st.session_state.tournament_finished:
-    st.sidebar.write("---")
-    if st.sidebar.button("Reset Tournament"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-
+if st.session_state.tournam
