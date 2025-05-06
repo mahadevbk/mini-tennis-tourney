@@ -8,13 +8,13 @@ from io import BytesIO
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# Register a custom font (for example, 'Arial')
-pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))  #  Make sure 'CoveredByYourGrace-Regular.ttf' is in the same directory or specify the correct path.
+# Register a custom font
+pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))
 
 def generate_tournament_layout(num_teams, num_courts):
     """
     Generates the layout for a tennis tournament, including team assignments,
-    semi-final pairings, and the final match.  Handles edge cases and errors.
+    semi-final pairings, and the final match. Handles edge cases and errors.
 
     Args:
         num_teams (int): The number of teams participating in the tournament.
@@ -49,21 +49,41 @@ def generate_tournament_layout(num_teams, num_courts):
     for court in range(1, num_courts + 1):
         team_assignments[court] = teams[(court - 1) * teams_per_court : court * teams_per_court]
 
-    # Determine semi-final pairings (top team from each court)
-    semi_final_teams = [team_assignments[court][0] for court in range(1, num_courts + 1)] # simplified to pick first team
-    if num_courts == 2:
-        semi_final_pairings = [(semi_final_teams[0], semi_final_teams[1])]
-        final_pairing = (semi_final_teams[0], semi_final_teams[1]) # simplified
-    elif num_courts == 3:
-        semi_final_pairings = [(semi_final_teams[0], semi_final_teams[1]), (semi_final_teams[2], "Bye")] #simplified
-        final_pairing = (semi_final_teams[0], semi_final_teams[1])
-    elif num_courts == 4:
-        semi_final_pairings = [(semi_final_teams[0], semi_final_teams[1]), (semi_final_teams[2], semi_final_teams[3])]
-        final_pairing = (semi_final_teams[0], semi_final_teams[2]) # simplified.
-
     return team_assignments, semi_final_pairings, final_pairing, error_message
 
+def determine_semi_finals(court_winners):
+    """
+    Determines the semi-final pairings based on the winners of each court.
 
+    Args:
+        court_winners (list): A list of the winning teams from each court.
+
+    Returns:
+        list: A list of tuples, where each tuple represents a semi-final pairing.
+    """
+    semi_final_pairings = []
+    if len(court_winners) == 2:
+        semi_final_pairings = [(court_winners[0], court_winners[1])]
+    elif len(court_winners) == 3:
+        semi_final_pairings = [(court_winners[0], court_winners[1]), (court_winners[2], "Bye")]
+    elif len(court_winners) == 4:
+        semi_final_pairings = [(court_winners[0], court_winners[1]), (court_winners[2], court_winners[3])]
+    return semi_final_pairings
+
+def determine_final_pairing(semi_final_winners):
+    """
+    Determines the final match pairing based on the winners of the semi-finals.
+
+    Args:
+        semi_final_winners (list): A list of the winning teams from the semi-final matches.
+
+    Returns:
+        tuple: A tuple representing the final match pairing.
+    """
+    if len(semi_final_winners) == 2:
+        return (semi_final_winners[0], semi_final_winners[1])
+    else:
+        return ()  # Or some other appropriate default
 
 def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts):
     """
@@ -82,19 +102,18 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
-    # Use the custom font
     styles['Normal'].fontName = 'Arial'
     styles['Heading1'].fontName = 'Arial'
     styles['Heading2'].fontName = 'Arial'
     styles['Heading3'].fontName = 'Arial'
 
-    # Title of the tournament
+    # Title
     title = Paragraph("Tennis Tournament Layout", styles['Heading1'])
-    title.style.alignment = 1  # Center alignment
+    title.style.alignment = 1
     elements.append(title)
-    elements.append(Paragraph("<br/><br/>", styles['Normal']))  # Add spacing
+    elements.append(Paragraph("<br/><br/>", styles['Normal']))
 
-    # Team Assignments Table
+    # Team Assignments
     elements.append(Paragraph("Team Assignments:", styles['Heading2']))
     data = [["Court", "Teams"]]
     for court, teams in team_assignments.items():
@@ -104,25 +123,25 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
         ('BACKGROUND', (0, 0), (-1, 0), '#4a148c'),
         ('TEXTCOLOR', (0, 0), (-1, 0), '#ffffff'),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Arial'),  # Set font for the table
+        ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ('GRID', (0, 0), (-1, -1), 1, '#000000'),
     ]))
     elements.append(table)
     elements.append(Paragraph("<br/><br/>", styles['Normal']))
 
-     # Semi-Final Pairings
+    # Semi-Final Pairings
     elements.append(Paragraph("Semi-Final Pairings:", styles['Heading2']))
     if semi_final_pairings:
-        data_semi = [["Court", "Team 1", "Team 2"]]
+        data_semi = [["Match", "Team 1", "Team 2"]] # Changed "Court" to "Match"
         for i, (team1, team2) in enumerate(semi_final_pairings):
-             data_semi.append([f"Court {i+1}", team1, team2])
+            data_semi.append([f"Match {i + 1}", team1, team2]) # Added Match Number
         table_semi = Table(data_semi)
         table_semi.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), '#003366'),
             ('TEXTCOLOR', (0, 0), (-1, 0), '#ffffff'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),  # Set font
+            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ('GRID', (0, 0), (-1, -1), 1, '#000000'),
         ]))
@@ -141,7 +160,7 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
             ('BACKGROUND', (0, 0), (-1, 0), '#990000'),
             ('TEXTCOLOR', (0, 0), (-1, 0), '#ffffff'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),  # Set font
+            ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
             ('GRID', (0, 0), (-1, -1), 1, '#000000'),
         ]))
@@ -152,6 +171,7 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
 def main():
     """
     Main function to run the Streamlit application.
@@ -168,6 +188,28 @@ def main():
             st.error(error_message)
         else:
             st.success("Tournament layout generated successfully!")
+
+            # Simulate match results (replace with actual user input in a real app)
+            court_winners = []
+            for court in range(1, num_courts + 1):
+                st.subheader(f"Court {court} Results")
+                winner = st.selectbox(f"Winner of Court {court}:", team_assignments[court])
+                court_winners.append(winner)
+
+            # Determine Semi-Finals and Finals
+            semi_final_pairings = determine_semi_finals(court_winners)
+            semi_final_winners = [] # In a real app, get this from user input
+            if semi_final_pairings:
+                st.subheader("Semi-Final Results")
+                for i, pairing in enumerate(semi_final_pairings):
+                    if "Bye" not in pairing:
+                        winner = st.selectbox(f"Winner of Semi-Final {i+1} ({pairing[0]} vs {pairing[1]}):", [pairing[0], pairing[1]])
+                        semi_final_winners.append(winner)
+                    else:
+                        semi_final_winners.append(pairing[0]) # The team with the bye is the winner.
+
+            final_pairing = determine_final_pairing(semi_final_winners)
+
             pdf_buffer = create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts)
             st.download_button(
                 label="Download Tournament Layout (PDF)",
@@ -176,7 +218,7 @@ def main():
                 mime="application/pdf",
             )
 
-            # Display the generated layout (optional, for visual confirmation in the app)
+            # Display the generated layout
             st.subheader("Team Assignments:")
             for court, teams in team_assignments.items():
                 st.write(f"Court {court}: {', '.join(teams)}")
@@ -193,7 +235,5 @@ def main():
                 st.write(f"{final_pairing[0]} vs {final_pairing[1]}")
             else:
                 st.write("N/A")
-
 if __name__ == "__main__":
     main()
-
