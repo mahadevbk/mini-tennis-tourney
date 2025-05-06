@@ -344,13 +344,13 @@ else:
                 if item_type == 'bye':
                     team = item.get('team')
                     if team:
-                        st.write(f"Match {i+1}: **{team}** gets a BYE")
+                        st.write(f"**{team}** gets a BYE") # Just show the team and bye status
                     else:
                         st.warning(f"Details missing for bye entry {i+1}.")
                 elif item_type == 'match':
                     teams = item.get('teams')
                     if teams is not None and isinstance(teams, list) and len(teams) >= 2:
-                        st.write(f"Match {i+1}: **{teams[0]}** vs **{teams[1]}**")
+                        st.write(f"**{teams[0]}** vs **{teams[1]}**") # Just show the teams playing
                     else:
                         st.warning(f"Details missing or invalid for match {i+1}.")
                 else:
