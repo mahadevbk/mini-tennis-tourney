@@ -103,7 +103,14 @@ def display_current_round():
     current_round_winners = {}
     all_winners_selected = True
 
+    # Iterate through the items prepared for the current round display
     for i, item in enumerate(st.session_state.current_round_items):
+        # Add check for 'teams' key before accessing
+        if 'teams' not in item:
+            st.warning(f"Skipping item {i+1} due to missing 'teams' key: {item}")
+            all_winners_selected = False # Cannot advance if data is missing
+            continue # Skip to the next item
+
         item_type = item['type']
         match_id = item['match_id']
         teams = item['teams']
@@ -326,7 +333,6 @@ elif st.session_state.tournament_finished:
 
 
 # --- Reset Button ---
-# Corrected the syntax error here
 if st.session_state.tournament_started or st.session_state.tournament_finished:
     st.sidebar.write("---")
     if st.sidebar.button("Reset Tournament"):
