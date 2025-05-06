@@ -119,14 +119,14 @@ def display_current_round():
              all_winners_selected = False # Cannot advance if data is missing
              continue # Skip to the next item
 
-        # Ensure court info is always included if available and wrap in bold
-        court_info = f" (**Court {court}**)" if court is not None else ""
+        # Display court assignment explicitly on a separate line
+        if court is not None:
+            st.write(f"**Court {court}**")
 
         if item_type == 'bye':
             team = item.get('team') # Get team name using 'team' key for bye items
             if team:
-                 # Include court_info here
-                 st.write(f"Match {i+1}{court_info}: **{team}** gets a BYE")
+                 st.write(f"Match {i+1}: **{team}** gets a BYE")
                  current_round_winners[match_id] = team
             else:
                  st.warning(f"Skipping bye item {i+1} due to missing team name: {item}")
@@ -138,8 +138,7 @@ def display_current_round():
                 team1 = teams[0]
                 team2 = teams[1]
 
-                # Include court_info here
-                st.write(f"Match {i+1}{court_info}: **{team1}** vs **{team2}**")
+                st.write(f"Match {i+1}: **{team1}** vs **{team2}**")
 
                 selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
 
