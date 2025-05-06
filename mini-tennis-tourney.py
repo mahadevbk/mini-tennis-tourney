@@ -13,8 +13,7 @@ pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))
 
 def generate_tournament_layout(num_teams, num_courts):
     """
-    Generates the layout for a tennis tournament, including team assignments,
-    semi-final pairings, and the final match. Handles edge cases.
+    Generates the layout for a tennis tournament, including team assignments.
 
     Args:
         num_teams (int): The number of teams participating in the tournament.
@@ -23,8 +22,6 @@ def generate_tournament_layout(num_teams, num_courts):
     Returns:
         tuple: A tuple containing the following:
             - team_assignments (dict): A dictionary mapping court numbers to lists of teams.
-            - semi_final_pairings (list): A list of tuples, where each tuple represents a semi-final pairing.
-            - final_pairing (tuple): A tuple representing the final match pairing.
             - error_message (str): An error message if any error occurs, otherwise None.
     """
     error_message = None
@@ -43,16 +40,16 @@ def generate_tournament_layout(num_teams, num_courts):
     random.shuffle(teams)
 
     teams_per_court = num_teams // num_courts
-    remaining_teams = num_teams % num_courts  # Calculate the remaining teams
+    remaining_teams = num_teams % num_courts
 
     for court in range(1, num_courts + 1):
         court_teams = teams[(court - 1) * teams_per_court : court * teams_per_court]
         if remaining_teams > 0:
-            court_teams.append(teams[num_teams - remaining_teams])  # Add one extra team
+            court_teams.append(teams[num_teams - remaining_teams])
             remaining_teams -= 1
         team_assignments[court] = court_teams
 
-    return team_assignments, semi_final_pairings, final_pairing, error_message
+    return team_assignments, error_message
 
 def determine_semi_finals(court_winners):
     """
@@ -185,12 +182,17 @@ def main():
     num_courts = st.number_input("Number of Courts (2-4):", min_value=2, max_value=4, value=2)
 
     if st.button("Generate Tournament"):
-        team_assignments, semi_final_pairings, final_pairing, error_message = generate_tournament_layout(num_teams, num_courts)
+        team_assignments, error_message = generate_tournament_layout(num_teams, num_courts)
 
         if error_message:
             st.error(error_message)
         else:
             st.success("Tournament layout generated successfully!")
+
+            # Display the generated layout
+            st.subheader("Team Assignments:")
+            for court, teams in team_assignments.items():
+                st.write(f"Court {court}: {', '.join(teams)}")
 
             # Simulate match results (replace with actual user input in a real app)
             court_winners = []
@@ -207,26 +209,20 @@ def main():
                 st.subheader("Semi-Final Results")
                 for i, pairing in enumerate(semi_final_pairings):
                     if "Bye" not in pairing:
-                         # Ensure the selectbox options are only the teams in that semi-final
                         winner = st.selectbox(f"Winner of Semi-Final {i+1} ({pairing[0]} vs {pairing[1]}):", [pairing[0], pairing[1]])
                         semi_final_winners.append(winner)
                     else:
                         semi_final_winners.append(pairing[0])
 
             final_pairing = determine_final_pairing(semi_final_winners)
-
             pdf_buffer = create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts)
+
             st.download_button(
                 label="Download Tournament Layout (PDF)",
                 data=pdf_buffer,
                 file_name="tournament_layout.pdf",
                 mime="application/pdf",
             )
-
-            # Display the generated layout
-            st.subheader("Team Assignments:")
-            for court, teams in team_assignments.items():
-                st.write(f"Court {court}: {', '.join(teams)}")
 
             st.subheader("Semi-Final Pairings:")
             if semi_final_pairings:
@@ -240,6 +236,5 @@ def main():
                 st.write(f"{final_pairing[0]} vs {final_pairing[1]}")
             else:
                 st.write("N/A")
-
 if __name__ == "__main__":
     main()
