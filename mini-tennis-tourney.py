@@ -91,6 +91,7 @@ def initialize_bracket_structure_with_courts(num_teams, num_courts):
         st.session_state.rounds_match_ids[round_index] = current_round_match_ids
         prev_round_match_ids = current_round_match_ids
 
+    # Identify the final match_id
     if num_rounds >= 1 and len(st.session_state.rounds_match_ids[num_rounds]) == 1:
          st.session_state.final_match_id = st.session_state.rounds_match_ids[num_rounds][0]
     else:
@@ -112,6 +113,11 @@ def display_current_round():
         match_id = item.get('match_id')
         court = item.get('court') # Use .get() here
 
+        # --- Debug Print ---
+        print(f"Debug: Processing item {i+1}: {item}")
+        # --- End Debug Print ---
+
+
         # Basic check for essential keys
         if item_type is None or match_id is None:
              st.warning(f"Skipping invalid item {i+1} due to missing type or match_id: {item}")
@@ -120,6 +126,11 @@ def display_current_round():
 
         # Ensure court info is always included if available
         court_info = f" (Court {court})" if court is not None else ""
+
+        # --- Debug Print ---
+        print(f"Debug: Court info for item {i+1}: '{court_info}'")
+        # --- End Debug Print ---
+
 
         if item_type == 'bye':
             team = item.get('team') # Get team name using 'team' key for bye items
