@@ -57,7 +57,7 @@ def initialize_bracket_structure_with_courts(num_teams, num_courts):
     bye_items_for_display = []
     for i, team in enumerate(teams_with_byes):
         bye_match_id = f'R1_B{i}'
-        # Note: Bye items use 'team' (singular) key
+        # Note: Bye items use 'team' (singular) key in the display item structure
         st.session_state.match_details[bye_match_id] = {'teams': [team, 'BYE'], 'winner': team} # Still store as ['Team', 'BYE'] in match_details for consistency
         r1_match_ids.append(bye_match_id)
         bye_items_for_display.append({'type': 'bye', 'match_id': bye_match_id, 'team': team}) # Store as 'team' in display items
@@ -67,6 +67,7 @@ def initialize_bracket_structure_with_courts(num_teams, num_courts):
     all_r1_display_items = r1_items_for_display + bye_items_for_display
     random.shuffle(all_r1_display_items)
 
+    # Assign courts to R1 display items
     for i, item in enumerate(all_r1_display_items):
         item['court'] = (i % num_courts) + 1
 
