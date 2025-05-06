@@ -1,130 +1,319 @@
 import streamlit as st
 import random
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+import math
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from io import BytesIO
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
-# Register a custom font
-pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))
+# --- Helper Functions ---
+def get_bracket_size(num_teams):
+    """Finds the smallest power of 2 >= num_teams."""
+    if num_teams < 1:
+        return 1
+    return 2**math.ceil(math.log2(num_teams))
 
-def generate_tournament_layout(num_teams, num_courts):
-    """
-    Generates the layout for a tennis tournament, including team assignments.
+def get_num_rounds(bracket_size):
+    """Calculates the number of rounds for a given bracket size."""
+    if bracket_size < 2:
+        return 0
+    return int(math.log2(bracket_size))
 
-    Args:
-        num_teams (int): The number of teams participating in the tournament.
-        num_courts (int): The number of tennis courts available.
-
-    Returns:
-        tuple: A tuple containing the following:
-            - team_assignments (dict): A dictionary mapping court numbers to lists of teams.
-            - error_message (str): An error message if any error occurs, otherwise None.
-    """
-    error_message = None
-    team_assignments = {}
-
-    if not 8 <= num_teams <= 16:
-        error_message = "Number of teams must be between 8 and 16."
-        return team_assignments, error_message
-    if not 2 <= num_courts <= 4:
-        error_message = "Number of courts must be between 2 and 4."
-        return team_assignments, error_message
+def initialize_bracket_structure_with_courts(num_teams, num_courts):
+    """Initializes the tournament bracket structure and sets up the first round."""
+    bracket_size = get_bracket_size(num_teams)
+    num_rounds = get_num_rounds(bracket_size)
+    byes = bracket_size - num_teams
 
     teams = [f"Team {i+1}" for i in range(num_teams)]
     random.shuffle(teams)
 
-    teams_per_court = num_teams // num_courts
-    remaining_teams = num_teams % num_courts
+    st.session_state.teams = teams
+    st.session_state.bracket_size = bracket_size
+    st.session_state.num_rounds = num_rounds
+    st.session_state.byes = byes
+    st.session_state.num_courts = num_courts # Store number of courts
+    st.session_state.match_details = {} # Store details of all potential matches by match_id
+    st.session_state.rounds_match_ids = [[] for _ in range(num_rounds + 1)] # Match_ids organized by round (Index 0 unused, R1 at Index 1)
+    st.session_state.next_round_feed = {} # Maps next_round_match_id to [prev_match_id1, prev_match_id2]
 
-    for court in range(1, num_courts + 1):
-        court_teams = teams[(court - 1) * teams_per_court : court * teams_per_court]
-        if remaining_teams > 0:
-            court_teams.append(teams[num_teams - remaining_teams])
-            remaining_teams -= 1
-        team_assignments[court] = court_teams
+    # Create R1 matches and bye entries
+    r1_match_ids = []
+    r1_items_for_display = [] # Items for the first round display (matches + byes)
 
-    return team_assignments, error_message
+    teams_copy = list(teams)
+    teams_with_byes = teams_copy[:byes]
+    teams_playing_r1 = teams_copy[byes:]
+
+    # Create R1 matches from teams_playing_r1
+    for i in range(0, len(teams_playing_r1), 2):
+        team1 = teams_playing_r1[i]
+        team2 = teams_playing_r1[i+1]
+        match_id = f'R1_M{i//2}'
+        st.session_state.match_details[match_id] = {'teams': [team1, team2], 'winner': None}
+        r1_match_ids.append(match_id)
+        r1_items_for_display.append({'type': 'match', 'match_id': match_id, 'teams': [team1, team2]})
+
+    # Create bye entries (teams with byes automatically win their 'match')
+    bye_items_for_display = []
+    for i, team in enumerate(teams_with_byes):
+        bye_match_id = f'R1_B{i}'
+        st.session_state.match_details[bye_match_id] = {'teams': [team, 'BYE'], 'winner': team}
+        r1_match_ids.append(bye_match_id)
+        bye_items_for_display.append({'type': 'bye', 'match_id': bye_match_id, 'team': team})
+
+    # Store R1 match_ids (both actual matches and bye 'matches')
+    st.session_state.rounds_match_ids[1] = r1_match_ids
+
+    # Combine and shuffle R1 display items for court assignment
+    all_r1_display_items = r1_items_for_display + bye_items_for_display
+    random.shuffle(all_r1_display_items)
+
+    # Assign courts to R1 display items
+    for i, item in enumerate(all_r1_display_items):
+        item['court'] = (i % num_courts) + 1
+
+    # Set the current round items for display
+    st.session_state.current_round_items = all_r1_display_items
+    st.session_state.current_round_index = 1 # Start with Round 1
+    st.session_state.tournament_started = True
+    st.session_state.tournament_finished = False
+    st.session_state.final_winner = None
+    st.session_state.round_winners_in_progress = {} # To store selected winners before advancing
+
+    # Build the structure of subsequent rounds' matches (feed)
+    prev_round_match_ids = r1_match_ids
+    for round_index in range(2, num_rounds + 1):
+        current_round_match_ids = []
+        # Pair up the match_ids from the previous round's results
+        for i in range(0, len(prev_round_match_ids), 2):
+            if i + 1 < len(prev_round_match_ids):
+                match_id = f'R{round_index}_M{i//2}'
+                # Teams are unknown at this stage, will be filled when advancing
+                st.session_state.match_details[match_id] = {'teams': [None, None], 'winner': None}
+                # Store which previous matches feed into this one
+                st.session_state.next_round_feed[match_id] = [prev_round_match_ids[i], prev_round_match_ids[i+1]]
+                current_round_match_ids.append(match_id)
+            # If there's an odd number of winners from the previous round, the last one
+            # would get a bye in this round, but our R1 bye logic prevents this in a standard bracket.
+            # This case should ideally not be reached if R1 byes are handled correctly.
+
+        st.session_state.rounds_match_ids[round_index] = current_round_match_ids
+        prev_round_match_ids = current_round_match_ids
+
+    # Identify the final match_id
+    if num_rounds >= 1 and len(st.session_state.rounds_match_ids[num_rounds]) == 1:
+         st.session_state.final_match_id = st.session_state.rounds_match_ids[num_rounds][0]
+    else:
+         st.session_state.final_match_id = None # Should not happen for 8-16 teams
 
 
-def create_pdf_layout(team_assignments, num_courts):
-    """
-    Creates a PDF document outlining the tournament layout.
+def display_current_round():
+    """Displays the matches for the current round and collects winner selections."""
+    st.header(f"Round {st.session_state.current_round_index}")
+    st.write("Select the winner for each match.")
 
-    Args:
-        team_assignments (dict): A dictionary mapping court numbers to lists of teams.
-        num_courts (int): Number of courts.
+    current_round_winners = {}
+    all_winners_selected = True
 
-    Returns:
-        BytesIO: A BytesIO object containing the PDF data.
-    """
+    # Iterate through the items prepared for the current round display
+    for i, item in enumerate(st.session_state.current_round_items):
+        item_type = item['type']
+        match_id = item['match_id']
+        teams = item['teams']
+        court_info = f" (Court {item['court']})" if 'court' in item else ""
+
+        if item_type == 'bye':
+            team = teams[0]
+            st.write(f"Match {i+1}{court_info}: **{team}** gets a BYE")
+            current_round_winners[match_id] = team # Winner is the team with bye
+        elif item_type == 'match':
+            team1, team2 = teams
+            st.write(f"Match {i+1}{court_info}: **{team1}** vs **{team2}**")
+
+            # Get pre-selected winner if available (e.g., after rerun)
+            selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
+
+            winner_selection = st.radio(
+                f"Winner for Match {i+1}:",
+                [team1, team2],
+                key=f"winner_{match_id}", # Use match_id for unique key
+                index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
+            )
+
+            if winner_selection:
+                current_round_winners[match_id] = winner_selection
+                # Store selected winner in session state immediately
+                if 'round_winners_in_progress' not in st.session_state:
+                    st.session_state.round_winners_in_progress = {}
+                st.session_state.round_winners_in_progress[match_id] = winner_selection
+            else:
+                all_winners_selected = False
+
+    return current_round_winners, all_winners_selected
+
+def advance_to_next_round_structured(current_round_winners):
+    """Processes the current round's winners and sets up the next round."""
+    # Update winners in the main match_details dictionary
+    for match_id, winner in current_round_winners.items():
+        if match_id in st.session_state.match_details:
+            st.session_state.match_details[match_id]['winner'] = winner
+
+    # Clear winners in progress for the next round
+    st.session_state.round_winners_in_progress = {}
+
+    # Move to the next round index
+    st.session_state.current_round_index += 1
+
+    next_round_index = st.session_state.current_round_index
+
+    # Check if the tournament is finished
+    if next_round_index > st.session_state.num_rounds:
+        st.session_state.tournament_finished = True
+        if st.session_state.final_match_id and st.session_state.final_match_id in st.session_state.match_details:
+             st.session_state.final_winner = st.session_state.match_details[st.session_state.final_match_id]['winner']
+        else:
+             st.session_state.final_winner = "Undetermined" # Should not happen in a full bracket
+        st.balloons() # Celebrate the winner!
+        return
+
+    # Get the match_ids for the next round
+    next_round_match_ids = st.session_state.rounds_match_ids[next_round_index]
+    next_round_items_for_display = []
+
+    # Set up the matches for the next round based on winners from the previous round
+    for match_id in next_round_match_ids:
+        # Find the match_ids from the previous round that feed into this match
+        feed1_id, feed2_id = st.session_state.next_round_feed[match_id]
+
+        # Get the winners from the previous round's matches
+        team1 = st.session_state.match_details[feed1_id]['winner']
+        team2 = st.session_state.match_details[feed2_id]['winner']
+
+        # Update the teams for this match in match_details
+        st.session_state.match_details[match_id]['teams'] = [team1, team2]
+
+        # Add this match to the list of items to display for the next round
+        next_round_items_for_display.append({
+            'type': 'match',
+            'match_id': match_id,
+            'teams': [team1, team2],
+            'winner': None # Winner not selected yet for this round
+        })
+
+    # Update the current round items for display
+    st.session_state.current_round_items = next_round_items_for_display
+    st.session_state.tournament_finished = False # Tournament is not finished yet
+
+def create_tournament_pdf_structured():
+    """Generates a PDF summary of the tournament results."""
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
     elements = []
     styles = getSampleStyleSheet()
-    styles['Normal'].fontName = 'Arial'
-    styles['Heading1'].fontName = 'Arial'
-    styles['Heading2'].fontName = 'Arial'
-    styles['Heading3'].fontName = 'Arial'
 
     # Title
-    title = Paragraph("Tennis Tournament Layout", styles['Heading1'])
-    title.style.alignment = 1
-    elements.append(title)
-    elements.append(Paragraph("<br/><br/>", styles['Normal']))
+    elements.append(Paragraph("Tennis Tournament Results", styles['h1']))
+    elements.append(Spacer(1, 0.2 * inch))
 
-    # Team Assignments
-    elements.append(Paragraph("Team Assignments:", styles['Heading2']))
-    data = [["Court", "Teams"]]
-    for court, teams in team_assignments.items():
-        data.append([f"Court {court}", ", ".join(teams)])
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), '#4a148c'),
-        ('TEXTCOLOR', (0, 0), (-1, 0), '#ffffff'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Arial'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('GRID', (0, 0), (-1, -1), 1, '#000000'),
-    ]))
-    elements.append(table)
+    # Initial Teams
+    elements.append(Paragraph("Initial Teams:", styles['h2']))
+    initial_teams_text = ", ".join(st.session_state.teams)
+    elements.append(Paragraph(initial_teams_text, styles['Normal']))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # Display results of each round
+    for r_index in range(1, st.session_state.num_rounds + 1):
+         elements.append(Paragraph(f"Round {r_index} Results:", styles['h2']))
+         round_match_ids = st.session_state.rounds_match_ids[r_index]
+         if not round_match_ids: # Skip if no matches in this round (e.g., R1 with all byes - unlikely for 8-16 teams)
+              continue
+
+         for match_id in round_match_ids:
+             match_details = st.session_state.match_details.get(match_id)
+             if match_details:
+                 team1, team2 = match_details['teams']
+                 winner = match_details['winner']
+                 if team2 == 'BYE':
+                     elements.append(Paragraph(f"{team1} gets a BYE", styles['Normal']))
+                 else:
+                     result_text = f"{team1} vs {team2}"
+                     if winner:
+                         result_text += f" - Winner: {winner}"
+                     elements.append(Paragraph(result_text, styles['Normal']))
+         elements.append(Spacer(1, 0.2 * inch))
+
+    # Display Final Winner
+    if st.session_state.tournament_finished and st.session_state.final_winner:
+         elements.append(Paragraph("Tournament Champion:", styles['h2']))
+         elements.append(Paragraph(st.session_state.final_winner, styles['Normal']))
 
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
 
+# --- Streamlit App Layout ---
+st.title("Tennis Tournament Simulator")
 
-def main():
-    """
-    Main function to run the Streamlit application.
-    """
-    st.title("Tennis Tournament Generator")
+# Initialize session state if not already done
+if 'tournament_started' not in st.session_state:
+    st.session_state.tournament_started = False
+    st.session_state.tournament_finished = False
+    st.session_state.final_winner = None
+    st.session_state.round_winners_in_progress = {} # Initialize here too
 
-    num_teams = st.number_input("Number of Teams (8-16):", min_value=8, max_value=16, value=8)
-    num_courts = st.number_input("Number of Courts (2-4):", min_value=2, max_value=4, value=2)
+# Input section (only shown before the tournament starts)
+if not st.session_state.tournament_started:
+    st.sidebar.header("Tournament Setup")
+    num_teams = st.sidebar.number_input("Number of teams (8-16):", min_value=8, max_value=16, value=8, step=1)
+    num_courts = st.sidebar.number_input("Number of courts (2-4):", min_value=2, max_value=4, value=2, step=1)
 
-    if st.button("Generate Tournament"):
-        team_assignments, error_message = generate_tournament_layout(num_teams, num_courts)
-        if error_message:
-            st.error(error_message)
-        else:
-            st.success("Tournament layout generated successfully!")
-            pdf_buffer = create_pdf_layout(team_assignments, num_courts)
-            st.download_button(
-                label="Download Tournament Layout (PDF)",
-                data=pdf_buffer,
-                file_name="tournament_layout.pdf",
-                mime="application/pdf",
-            )
+    if st.sidebar.button("Start Tournament"):
+        initialize_bracket_structure_with_courts(num_teams, num_courts)
+        st.rerun() # Rerun to show the first round
 
-            # Display layout in Streamlit
-            st.subheader("Team Assignments:")
-            for court, teams in team_assignments.items():
-                st.write(f"Court {court}: {', '.join(teams)}")
+# Tournament in progress
+if st.session_state.tournament_started and not st.session_state.tournament_finished:
+    display_current_round_revised()
 
-if __name__ == "__main__":
-    main()
+    # Check if all matches in the current round have winners selected
+    # We can infer this by comparing the number of selected winners to the number of items
+    # in the current round display list that are actual matches (not byes).
+    num_actual_matches_in_round = sum(1 for item in st.session_state.current_round_items if item['type'] == 'match')
+    all_winners_selected = len(st.session_state.round_winners_in_progress) == num_actual_matches_in_round
+
+    if all_winners_selected:
+        if st.button("Advance to Next Round"):
+            # Pass the collected winners to the advance function
+            advance_to_next_round_structured(st.session_state.round_winners_in_progress)
+            st.rerun() # Rerun to show the next round or final result
+    elif num_actual_matches_in_round > 0:
+        st.info("Please select winners for all matches to advance.")
+
+# Tournament finished
+elif st.session_state.tournament_finished:
+    st.header("Tournament Complete!")
+    st.subheader(f"Champion: {st.session_state.final_winner}")
+
+    # --- PDF Generation Button ---
+    st.write("---")
+    st.subheader("Download Tournament Results")
+    pdf_buffer = create_tournament_pdf_structured()
+    st.download_button(
+        label="Download PDF Results",
+        data=pdf_buffer,
+        file_name="tournament_results.pdf",
+        mime="application/pdf"
+    )
+
+# --- Reset Button ---
+if st.session_state.tournament_started or st.session_state.tournament_finished:
+    st.sidebar.write("---")
+    if st.sidebar.button("Reset Tournament"):
+        # Clear all session state variables to reset the app
+        for key in st.session_state.keys():
+            del st.session_state[key]
+        st.rerun() # Rerun to go back to the setup screen
+
