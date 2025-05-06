@@ -57,9 +57,10 @@ def initialize_bracket_structure_with_courts(num_teams, num_courts):
     bye_items_for_display = []
     for i, team in enumerate(teams_with_byes):
         bye_match_id = f'R1_B{i}'
-        st.session_state.match_details[bye_match_id] = {'teams': [team, 'BYE'], 'winner': team}
+        # Note: Bye items use 'team' (singular) key
+        st.session_state.match_details[bye_match_id] = {'teams': [team, 'BYE'], 'winner': team} # Still store as ['Team', 'BYE'] in match_details for consistency
         r1_match_ids.append(bye_match_id)
-        bye_items_for_display.append({'type': 'bye', 'match_id': bye_match_id, 'team': team})
+        bye_items_for_display.append({'type': 'bye', 'match_id': bye_match_id, 'team': team}) # Store as 'team' in display items
 
     st.session_state.rounds_match_ids[1] = r1_match_ids
 
@@ -105,45 +106,59 @@ def display_current_round():
 
     # Iterate through the items prepared for the current round display
     for i, item in enumerate(st.session_state.current_round_items):
-        # Add check for 'teams' key before accessing
-        if 'teams' not in item:
-            st.warning(f"Skipping item {i+1} due to missing 'teams' key: {item}")
-            all_winners_selected = False # Cannot advance if data is missing
-            continue # Skip to the next item
+        # Use .get() with default values for robustness
+        item_type = item.get('type')
+        match_id = item.get('match_id')
+        court = item.get('court') # Use .get() here
 
-        item_type = item['type']
-        match_id = item['match_id']
-        teams = item['teams']
-        court_info = f" (Court {item['court']})" if 'court' in item else ""
+        # Basic check for essential keys
+        if item_type is None or match_id is None:
+             st.warning(f"Skipping invalid item {i+1} due to missing type or match_id: {item}")
+             all_winners_selected = False # Cannot advance if data is missing
+             continue # Skip to the next item
+
+        court_info = f" (Court {court})" if court is not None else ""
 
         if item_type == 'bye':
-            team = teams[0]
-            st.write(f"Match {i+1}{court_info}: **{team}** gets a BYE")
-            current_round_winners[match_id] = team
-        elif item_type == 'match':
-            team1, team2 = teams
-            st.write(f"Match {i+1}{court_info}: **{team1}** vs **{team2}**")
-
-            selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
-
-            if team1 is not None and team2 is not None:
-                 winner_selection = st.radio(
-                     f"Winner for Match {i+1}:",
-                     [team1, team2],
-                     key=f"winner_{match_id}",
-                     index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
-                 )
-
-                 if winner_selection:
-                     current_round_winners[match_id] = winner_selection
-                     if 'round_winners_in_progress' not in st.session_state:
-                         st.session_state.round_winners_in_progress = {}
-                     st.session_state.round_winners_in_progress[match_id] = winner_selection
-                 else:
-                     all_winners_selected = False
+            team = item.get('team') # Get team name using 'team' key for bye items
+            if team:
+                 st.write(f"Match {i+1}{court_info}: **{team}** gets a BYE")
+                 current_round_winners[match_id] = team
             else:
-                 st.warning(f"Match {i+1} is missing teams.")
+                 st.warning(f"Skipping bye item {i+1} due to missing team name: {item}")
                  all_winners_selected = False
+
+        elif item_type == 'match':
+            teams = item.get('teams') # Get teams list using 'teams' key for match items
+            if teams is not None and isinstance(teams, list) and len(teams) >= 2:
+                team1 = teams[0]
+                team2 = teams[1]
+
+                st.write(f"Match {i+1}{court_info}: **{team1}** vs **{team2}**")
+
+                selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
+
+                winner_selection = st.radio(
+                    f"Winner for Match {i+1}:",
+                    [team1, team2],
+                    key=f"winner_{match_id}",
+                    index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
+                )
+
+                if winner_selection:
+                    current_round_winners[match_id] = winner_selection
+                    if 'round_winners_in_progress' not in st.session_state:
+                        st.session_state.round_winners_in_progress = {}
+                    st.session_state.round_winners_in_progress[match_id] = winner_selection
+                else:
+                    all_winners_selected = False
+            else:
+                 st.warning(f"Match {i+1} is missing required teams or teams data is invalid: {item}")
+                 all_winners_selected = False # Cannot advance if teams are missing
+        else:
+            st.warning(f"Skipping item {i+1} with unknown type '{item_type}': {item}")
+            all_winners_selected = False
+
 
     return current_round_winners, all_winners_selected
 
@@ -300,7 +315,9 @@ else:
 if st.session_state.tournament_started and not st.session_state.tournament_finished:
     current_round_winners, all_winners_selected = display_current_round()
 
-    num_actual_matches_in_round = sum(1 for item in st.session_state.current_round_items if item['type'] == 'match')
+    # Recalculate num_actual_matches_in_round based on the items successfully processed
+    num_actual_matches_in_round = sum(1 for item in st.session_state.current_round_items if item.get('type') == 'match' and item.get('teams') is not None and isinstance(item.get('teams'), list) and len(item.get('teams')) >= 2)
+
 
     if all_winners_selected and num_actual_matches_in_round > 0:
         if st.button("Advance to Next Round"):
