@@ -14,7 +14,7 @@ pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))
 def generate_tournament_layout(num_teams, num_courts):
     """
     Generates the layout for a tennis tournament, including team assignments,
-    semi-final pairings, and the final match. Handles edge cases and errors.
+    semi-final pairings, and the final match. Handles edge cases.
 
     Args:
         num_teams (int): The number of teams participating in the tournament.
@@ -38,16 +38,19 @@ def generate_tournament_layout(num_teams, num_courts):
     if not 2 <= num_courts <= 4:
         error_message = "Number of courts must be between 2 and 4."
         return team_assignments, semi_final_pairings, final_pairing, error_message
-    if num_teams % num_courts != 0:
-        error_message = "Number of teams must be divisible by the number of courts."
-        return team_assignments, semi_final_pairings, final_pairing, error_message
 
     teams = [f"Team {i+1}" for i in range(num_teams)]
     random.shuffle(teams)
 
     teams_per_court = num_teams // num_courts
+    remaining_teams = num_teams % num_courts  # Calculate the remaining teams
+
     for court in range(1, num_courts + 1):
-        team_assignments[court] = teams[(court - 1) * teams_per_court : court * teams_per_court]
+        court_teams = teams[(court - 1) * teams_per_court : court * teams_per_court]
+        if remaining_teams > 0:
+            court_teams.append(teams[num_teams - remaining_teams])  # Add one extra team
+            remaining_teams -= 1
+        team_assignments[court] = court_teams
 
     return team_assignments, semi_final_pairings, final_pairing, error_message
 
@@ -83,7 +86,7 @@ def determine_final_pairing(semi_final_winners):
     if len(semi_final_winners) == 2:
         return (semi_final_winners[0], semi_final_winners[1])
     else:
-        return ()  # Or some other appropriate default
+        return ()
 
 def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts):
     """
@@ -133,9 +136,9 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
     # Semi-Final Pairings
     elements.append(Paragraph("Semi-Final Pairings:", styles['Heading2']))
     if semi_final_pairings:
-        data_semi = [["Match", "Team 1", "Team 2"]] # Changed "Court" to "Match"
+        data_semi = [["Match", "Team 1", "Team 2"]]
         for i, (team1, team2) in enumerate(semi_final_pairings):
-            data_semi.append([f"Match {i + 1}", team1, team2]) # Added Match Number
+            data_semi.append([f"Match {i + 1}", team1, team2])
         table_semi = Table(data_semi)
         table_semi.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), '#003366'),
@@ -193,20 +196,22 @@ def main():
             court_winners = []
             for court in range(1, num_courts + 1):
                 st.subheader(f"Court {court} Results")
+                # Ensure that the selectbox options are only the teams playing on that court
                 winner = st.selectbox(f"Winner of Court {court}:", team_assignments[court])
                 court_winners.append(winner)
 
             # Determine Semi-Finals and Finals
             semi_final_pairings = determine_semi_finals(court_winners)
-            semi_final_winners = [] # In a real app, get this from user input
+            semi_final_winners = []
             if semi_final_pairings:
                 st.subheader("Semi-Final Results")
                 for i, pairing in enumerate(semi_final_pairings):
                     if "Bye" not in pairing:
+                         # Ensure the selectbox options are only the teams in that semi-final
                         winner = st.selectbox(f"Winner of Semi-Final {i+1} ({pairing[0]} vs {pairing[1]}):", [pairing[0], pairing[1]])
                         semi_final_winners.append(winner)
                     else:
-                        semi_final_winners.append(pairing[0]) # The team with the bye is the winner.
+                        semi_final_winners.append(pairing[0])
 
             final_pairing = determine_final_pairing(semi_final_winners)
 
@@ -235,5 +240,6 @@ def main():
                 st.write(f"{final_pairing[0]} vs {final_pairing[1]}")
             else:
                 st.write("N/A")
+
 if __name__ == "__main__":
     main()
