@@ -225,6 +225,11 @@ def create_tournament_pdf_structured():
         st.error("Tournament data is incomplete or missing. Cannot generate PDF.")
         return None # Return None if data is missing
 
+    # Add a specific check for rounds_match_ids structure
+    if not isinstance(st.session_state.rounds_match_ids, list):
+        st.error("Tournament rounds data is corrupted. Cannot generate PDF.")
+        return None
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
     elements = []
@@ -245,8 +250,14 @@ def create_tournament_pdf_structured():
     if isinstance(st.session_state.num_rounds, int) and st.session_state.num_rounds >= 1:
         for r_index in range(1, st.session_state.num_rounds + 1):
              elements.append(Paragraph(f"Round {r_index} Results:", styles['h2']))
-             # Check if round_match_ids exists for this round index
-             round_match_ids = st.session_state.rounds_match_ids[r_index] if r_index < len(st.session_state.rounds_match_ids) else []
+
+             # More robust check for round_match_ids at this index
+             if r_index >= len(st.session_state.rounds_match_ids) or not isinstance(st.session_state.rounds_match_ids[r_index], list):
+                 st.warning(f"Data for Round {r_index} is missing or corrupted.")
+                 elements.append(Paragraph(f"Data for Round {r_index} is missing or corrupted.", styles['Normal']))
+                 continue # Skip this round
+
+             round_match_ids = st.session_state.rounds_match_ids[r_index]
 
              if not round_match_ids: # Skip if no matches in this round
                   elements.append(Paragraph("No matches in this round.", styles['Normal']))
