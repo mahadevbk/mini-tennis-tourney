@@ -119,14 +119,16 @@ def display_current_round():
              all_winners_selected = False # Cannot advance if data is missing
              continue # Skip to the next item
 
-        # Display court assignment explicitly on a separate line
+        # Display court assignment explicitly and prominently
         if court is not None:
-            st.write(f"**Court {court}**")
+            st.subheader(f"**Court {court}**") # Using subheader to make it stand out
+            st.write(f"Match {i+1}:") # Display match number after court
+
 
         if item_type == 'bye':
             team = item.get('team') # Get team name using 'team' key for bye items
             if team:
-                 st.write(f"Match {i+1}: **{team}** gets a BYE")
+                 st.write(f"**{team}** gets a BYE")
                  current_round_winners[match_id] = team
             else:
                  st.warning(f"Skipping bye item {i+1} due to missing team name: {item}")
@@ -138,12 +140,12 @@ def display_current_round():
                 team1 = teams[0]
                 team2 = teams[1]
 
-                st.write(f"Match {i+1}: **{team1}** vs **{team2}**")
+                st.write(f"**{team1}** vs **{team2}**") # Display teams after court and match number
 
                 selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
 
                 winner_selection = st.radio(
-                    f"Winner for Match {i+1}:",
+                    f"Winner for Match {i+1} on Court {court}:", # Include court in radio button label for clarity
                     [team1, team2],
                     key=f"winner_{match_id}",
                     index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
@@ -162,6 +164,8 @@ def display_current_round():
         else:
             st.warning(f"Skipping item {i+1} with unknown type '{item_type}': {item}")
             all_winners_selected = False
+
+        st.write("---") # Add a separator for clarity between matches
 
 
     return current_round_winners, all_winners_selected
