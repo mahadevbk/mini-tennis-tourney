@@ -184,38 +184,48 @@ def main():
     """
     st.title("Tennis Tournament Generator")
 
-    # Clear session state at the beginning
+    # Initialize session state variables
     if 'generate_tournament' not in st.session_state:
         st.session_state.generate_tournament = False
+    if 'team_assignments' not in st.session_state:
+        st.session_state.team_assignments = {}
     if 'court_winners' not in st.session_state:
-        st.session_state.court_winners = []
+        st.session_state.court_winners = {}  # Change to dict
     if 'semi_final_pairings' not in st.session_state:
         st.session_state.semi_final_pairings = []
     if 'semi_final_winners' not in st.session_state:
         st.session_state.semi_final_winners = []
     if 'final_pairing' not in st.session_state:
         st.session_state.final_pairing = ()
-    
+    if 'num_courts' not in st.session_state:
+        st.session_state.num_courts = 0
+    if 'num_teams' not in st.session_state:
+        st.session_state.num_teams = 0
+
     num_teams = st.number_input("Number of Teams (8-16):", min_value=8, max_value=16, value=8)
     num_courts = st.number_input("Number of Courts (2-4):", min_value=2, max_value=4, value=2)
+    
+    st.session_state.num_courts = num_courts
+    st.session_state.num_teams = num_teams
 
     if st.button("Generate Tournament"):
         st.session_state.generate_tournament = True
         team_assignments, error_message = generate_tournament_layout(num_teams, num_courts)
         if error_message:
             st.error(error_message)
+            st.session_state.generate_tournament = False # added to prevent errors
         else:
             st.session_state.team_assignments = team_assignments
+            st.session_state.court_winners = {}  # Reset court winners on new tournament
+            st.session_state.semi_final_pairings = []
+            st.session_state.semi_final_winners = []
+            st.session_state.final_pairing = ()
 
     if st.session_state.generate_tournament:
-        team_assignments = st.session_state.get("team_assignments",{})
+        team_assignments = st.session_state.get("team_assignments", {})
         if not team_assignments:
             st.stop()
         st.success("Tournament layout generated successfully!")
-        
-        # Ensure court_winners is initialized correctly
-        if len(st.session_state.court_winners) != num_courts:
-            st.session_state.court_winners = [None] * num_courts
 
         all_courts_done = True
         # Collect court winners
@@ -226,19 +236,20 @@ def main():
                 f"Winner of Court {court}:",
                 team_assignments[court],
                 index=(
-                    team_assignments[court].index(st.session_state.court_winners[court - 1])
-                    if st.session_state.court_winners[court - 1] is not None
+                    team_assignments[court].index(st.session_state.court_winners.get(court))
+                    if st.session_state.court_winners.get(court) is not None
                     else 0
                 ),
                 key=f"court_winner_{court}",  # Unique key for each selectbox
             )
-            st.session_state.court_winners[court - 1] = winner
-            if st.session_state.court_winners[court-1] is None:
+            st.session_state.court_winners[court] = winner # changed to court
+            if st.session_state.court_winners.get(court) is None: # changed to court
                 all_courts_done = False
         
         if all_courts_done:
             # Determine Semi-Finals
-            st.session_state.semi_final_pairings = determine_semi_finals(st.session_state.court_winners)
+            court_winners_list = [st.session_state.court_winners[i] for i in sorted(st.session_state.court_winners.keys())]
+            st.session_state.semi_final_pairings = determine_semi_finals(court_winners_list)
             semi_final_winners = []
 
             # Display Semi-Finals and collect winners
