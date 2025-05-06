@@ -197,6 +197,7 @@ def advance_to_next_round_structured(current_round_winners):
 
             st.session_state.match_details[match_id]['teams'] = [team1, team2]
 
+            # Create the display item for the next round match
             next_round_items_for_display.append({
                 'type': 'match',
                 'match_id': match_id,
@@ -205,6 +206,13 @@ def advance_to_next_round_structured(current_round_winners):
             })
         else:
             st.error(f"Error setting up match {match_id}: Feed information missing.")
+
+    # Assign courts to the matches in the next round items for display
+    # Only assign courts if there are items to display and num_courts is valid
+    if next_round_items_for_display and st.session_state.num_courts > 0:
+        for i, item in enumerate(next_round_items_for_display):
+            item['court'] = (i % st.session_state.num_courts) + 1
+
 
     st.session_state.current_round_items = next_round_items_for_display
     st.session_state.tournament_finished = False
