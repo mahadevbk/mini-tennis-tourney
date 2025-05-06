@@ -135,21 +135,26 @@ def display_current_round():
             # Get pre-selected winner if available (e.g., after rerun)
             selected_winner = st.session_state.get('round_winners_in_progress', {}).get(match_id)
 
-            winner_selection = st.radio(
-                f"Winner for Match {i+1}:",
-                [team1, team2],
-                key=f"winner_{match_id}", # Use match_id for unique key
-                index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
-            )
+            # Ensure teams are not None before creating radio buttons
+            if team1 is not None and team2 is not None:
+                 winner_selection = st.radio(
+                     f"Winner for Match {i+1}:",
+                     [team1, team2],
+                     key=f"winner_{match_id}", # Use match_id for unique key
+                     index=[team1, team2].index(selected_winner) if selected_winner in [team1, team2] else None
+                 )
 
-            if winner_selection:
-                current_round_winners[match_id] = winner_selection
-                # Store selected winner in session state immediately
-                if 'round_winners_in_progress' not in st.session_state:
-                    st.session_state.round_winners_in_progress = {}
-                st.session_state.round_winners_in_progress[match_id] = winner_selection
+                 if winner_selection:
+                     current_round_winners[match_id] = winner_selection
+                     # Store selected winner in session state immediately
+                     if 'round_winners_in_progress' not in st.session_state:
+                         st.session_state.round_winners_in_progress = {}
+                     st.session_state.round_winners_in_progress[match_id] = winner_selection
+                 else:
+                     all_winners_selected = False
             else:
-                all_winners_selected = False
+                 st.warning(f"Match {i+1} is missing teams.")
+                 all_winners_selected = False # Cannot advance if teams are missing
 
     return current_round_winners, all_winners_selected
 
@@ -174,7 +179,7 @@ def advance_to_next_round_structured(current_round_winners):
         if st.session_state.final_match_id and st.session_state.final_match_id in st.session_state.match_details:
              st.session_state.final_winner = st.session_state.match_details[st.session_state.final_match_id]['winner']
         else:
-             st.session_state.final_winner = "Undetermined" # Should not happen in a full bracket
+             st.session_state.final_winner = "Undetermined" # Should not happen for a full bracket
         st.balloons() # Celebrate the winner!
         return
 
@@ -185,22 +190,28 @@ def advance_to_next_round_structured(current_round_winners):
     # Set up the matches for the next round based on winners from the previous round
     for match_id in next_round_match_ids:
         # Find the match_ids from the previous round that feed into this match
-        feed1_id, feed2_id = st.session_state.next_round_feed[match_id]
+        # Add check if match_id exists in next_round_feed
+        if match_id in st.session_state.next_round_feed:
+            feed1_id, feed2_id = st.session_state.next_round_feed[match_id]
 
-        # Get the winners from the previous round's matches
-        team1 = st.session_state.match_details[feed1_id]['winner']
-        team2 = st.session_state.match_details[feed2_id]['winner']
+            # Get the winners from the previous round's matches
+            # Add checks if feed_ids exist in match_details and have winners
+            team1 = st.session_state.match_details.get(feed1_id, {}).get('winner')
+            team2 = st.session_state.match_details.get(feed2_id, {}).get('winner')
 
-        # Update the teams for this match in match_details
-        st.session_state.match_details[match_id]['teams'] = [team1, team2]
+            # Update the teams for this match in match_details
+            st.session_state.match_details[match_id]['teams'] = [team1, team2]
 
-        # Add this match to the list of items to display for the next round
-        next_round_items_for_display.append({
-            'type': 'match',
-            'match_id': match_id,
-            'teams': [team1, team2],
-            'winner': None # Winner not selected yet for this round
-        })
+            # Add this match to the list of items to display for the next round
+            next_round_items_for_display.append({
+                'type': 'match',
+                'match_id': match_id,
+                'teams': [team1, team2],
+                'winner': None # Winner not selected yet for this round
+            })
+        else:
+            st.error(f"Error setting up match {match_id}: Feed information missing.")
+
 
     # Update the current round items for display
     st.session_state.current_round_items = next_round_items_for_display
@@ -208,6 +219,12 @@ def advance_to_next_round_structured(current_round_winners):
 
 def create_tournament_pdf_structured():
     """Generates a PDF summary of the tournament results."""
+    # Add checks for required session state keys before proceeding
+    required_keys = ['teams', 'num_rounds', 'rounds_match_ids', 'match_details', 'tournament_finished', 'final_winner']
+    if not all(key in st.session_state for key in required_keys):
+        st.error("Tournament data is incomplete or missing. Cannot generate PDF.")
+        return None # Return None if data is missing
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
     elements = []
@@ -224,25 +241,35 @@ def create_tournament_pdf_structured():
     elements.append(Spacer(1, 0.2 * inch))
 
     # Display results of each round
-    for r_index in range(1, st.session_state.num_rounds + 1):
-         elements.append(Paragraph(f"Round {r_index} Results:", styles['h2']))
-         round_match_ids = st.session_state.rounds_match_ids[r_index]
-         if not round_match_ids: # Skip if no matches in this round (e.g., R1 with all byes - unlikely for 8-16 teams)
-              continue
+    # Check if num_rounds is a valid number before iterating
+    if isinstance(st.session_state.num_rounds, int) and st.session_state.num_rounds >= 1:
+        for r_index in range(1, st.session_state.num_rounds + 1):
+             elements.append(Paragraph(f"Round {r_index} Results:", styles['h2']))
+             # Check if round_match_ids exists for this round index
+             round_match_ids = st.session_state.rounds_match_ids[r_index] if r_index < len(st.session_state.rounds_match_ids) else []
 
-         for match_id in round_match_ids:
-             match_details = st.session_state.match_details.get(match_id)
-             if match_details:
-                 team1, team2 = match_details['teams']
-                 winner = match_details['winner']
-                 if team2 == 'BYE':
-                     elements.append(Paragraph(f"{team1} gets a BYE", styles['Normal']))
+             if not round_match_ids: # Skip if no matches in this round
+                  elements.append(Paragraph("No matches in this round.", styles['Normal']))
+                  continue
+
+             for match_id in round_match_ids:
+                 match_details = st.session_state.match_details.get(match_id)
+                 if match_details:
+                     team1, team2 = match_details.get('teams', [None, None])
+                     winner = match_details.get('winner')
+                     if team2 == 'BYE':
+                         elements.append(Paragraph(f"{team1} gets a BYE", styles['Normal']))
+                     else:
+                         result_text = f"{team1} vs {team2}"
+                         if winner:
+                             result_text += f" - Winner: {winner}"
+                         elements.append(Paragraph(result_text, styles['Normal']))
                  else:
-                     result_text = f"{team1} vs {team2}"
-                     if winner:
-                         result_text += f" - Winner: {winner}"
-                     elements.append(Paragraph(result_text, styles['Normal']))
-         elements.append(Spacer(1, 0.2 * inch))
+                      elements.append(Paragraph(f"Details missing for match {match_id}.", styles['Normal']))
+             elements.append(Spacer(1, 0.2 * inch))
+    else:
+        elements.append(Paragraph("Tournament rounds data is incomplete.", styles['Normal']))
+
 
     # Display Final Winner
     if st.session_state.tournament_finished and st.session_state.final_winner:
@@ -263,6 +290,19 @@ if 'tournament_started' not in st.session_state:
     st.session_state.tournament_finished = False
     st.session_state.final_winner = None
     st.session_state.round_winners_in_progress = {} # Initialize here too
+    # Initialize other potential keys to prevent KeyErrors on first run before setup
+    st.session_state.teams = []
+    st.session_state.bracket_size = 0
+    st.session_state.num_rounds = 0
+    st.session_state.byes = 0
+    st.session_state.num_courts = 0
+    st.session_state.match_details = {}
+    st.session_state.rounds_match_ids = []
+    st.session_state.next_round_feed = {}
+    st.session_state.current_round_items = []
+    st.session_state.current_round_index = 0
+    st.session_state.final_match_id = None
+
 
 # Input section (only shown before the tournament starts)
 if not st.session_state.tournament_started:
@@ -276,44 +316,55 @@ if not st.session_state.tournament_started:
 
 # Tournament in progress
 if st.session_state.tournament_started and not st.session_state.tournament_finished:
-    display_current_round_revised()
+    # Corrected function call
+    current_round_winners, all_winners_selected = display_current_round()
 
     # Check if all matches in the current round have winners selected
     # We can infer this by comparing the number of selected winners to the number of items
     # in the current round display list that are actual matches (not byes).
     num_actual_matches_in_round = sum(1 for item in st.session_state.current_round_items if item['type'] == 'match')
-    all_winners_selected = len(st.session_state.round_winners_in_progress) == num_actual_matches_in_round
 
-    if all_winners_selected:
+    if all_winners_selected and num_actual_matches_in_round > 0: # Only show button if there are matches and all winners are selected
         if st.button("Advance to Next Round"):
             # Pass the collected winners to the advance function
-            advance_to_next_round_structured(st.session_state.round_winners_in_progress)
+            advance_to_next_round_structured(current_round_winners)
             st.rerun() # Rerun to show the next round or final result
-    elif num_actual_matches_in_round > 0:
+    elif num_actual_matches_in_round > 0 and not all_winners_selected:
         st.info("Please select winners for all matches to advance.")
+
 
 # Tournament finished
 elif st.session_state.tournament_finished:
     st.header("Tournament Complete!")
-    st.subheader(f"Champion: {st.session_state.final_winner}")
+    # Add check before displaying final winner
+    if st.session_state.final_winner:
+        st.subheader(f"Champion: {st.session_state.final_winner}")
+    else:
+        st.subheader("Tournament finished, but champion could not be determined.")
+
 
     # --- PDF Generation Button ---
     st.write("---")
     st.subheader("Download Tournament Results")
     pdf_buffer = create_tournament_pdf_structured()
-    st.download_button(
-        label="Download PDF Results",
-        data=pdf_buffer,
-        file_name="tournament_results.pdf",
-        mime="application/pdf"
-    )
+    # Only show the download button if PDF buffer was successfully created
+    if pdf_buffer:
+        st.download_button(
+            label="Download PDF Results",
+            data=pdf_buffer,
+            file_name="tournament_results.pdf",
+            mime="application/pdf"
+        )
+    else:
+        st.warning("Could not generate PDF due to missing tournament data.")
+
 
 # --- Reset Button ---
 if st.session_state.tournament_started or st.session_state.tournament_finished:
     st.sidebar.write("---")
     if st.sidebar.button("Reset Tournament"):
         # Clear all session state variables to reset the app
-        for key in st.session_state.keys():
+        for key in list(st.session_state.keys()): # Use list() to avoid RuntimeError during iteration
             del st.session_state[key]
         st.rerun() # Rerun to go back to the setup screen
 
