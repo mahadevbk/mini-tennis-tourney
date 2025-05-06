@@ -284,13 +284,14 @@ def create_tournament_pdf_structured():
 # --- Streamlit App Layout ---
 st.title("Tennis Tournament Simulator")
 
-# Initialize session state if not already done
-if 'tournament_started' not in st.session_state:
+# Initialize session state using a single flag
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    # Initialize all other necessary keys with default values
     st.session_state.tournament_started = False
     st.session_state.tournament_finished = False
     st.session_state.final_winner = None
-    st.session_state.round_winners_in_progress = {} # Initialize here too
-    # Initialize other potential keys to prevent KeyErrors on first run before setup
+    st.session_state.round_winners_in_progress = {}
     st.session_state.teams = []
     st.session_state.bracket_size = 0
     st.session_state.num_rounds = 0
