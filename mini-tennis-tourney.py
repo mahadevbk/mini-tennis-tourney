@@ -313,10 +313,16 @@ if not st.session_state.tournament_started:
     if st.sidebar.button("Start Tournament"):
         initialize_bracket_structure_with_courts(num_teams, num_courts)
         st.rerun() # Rerun to show the first round
+else:
+    # Display current setup when tournament has started
+    st.sidebar.header("Current Tournament Setup")
+    st.sidebar.write(f"Teams: {len(st.session_state.teams)}")
+    st.sidebar.write(f"Courts: {st.session_state.num_courts}")
+    st.sidebar.write(f"Current Round: {st.session_state.current_round_index}")
+
 
 # Tournament in progress
 if st.session_state.tournament_started and not st.session_state.tournament_finished:
-    # Corrected function call
     current_round_winners, all_winners_selected = display_current_round()
 
     # Check if all matches in the current round have winners selected
