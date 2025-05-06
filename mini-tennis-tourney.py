@@ -178,6 +178,8 @@ def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_
     buffer.seek(0)
     return buffer
 
+
+
 def main():
     """
     Main function to run the Streamlit application.
@@ -195,41 +197,55 @@ def main():
         else:
             st.success("Tournament layout generated successfully!")
 
-            # Display the generated layout
-            st.subheader("Team Assignments:")
-            for court, teams in team_assignments.items():
-                st.write(f"Court {court}: {', '.join(teams)}")
-
-            # Simulate match results (replace with actual user input in a real app)
+            # Collect court winners
             court_winners = []
             for court in range(1, num_courts + 1):
                 st.subheader(f"Court {court} Results")
                 # Ensure that the selectbox options are only the teams playing on that court
-                winner = st.selectbox(f"Winner of Court {court}:", team_assignments[court])
+                winner = st.selectbox(
+                    f"Winner of Court {court}:", team_assignments[court]
+                )
                 court_winners.append(winner)
 
-            # Determine Semi-Finals and Finals
+            # Determine Semi-Finals
             semi_final_pairings = determine_semi_finals(court_winners)
             semi_final_winners = []
+
+            # Display Semi-Finals and collect winners
+            st.subheader("Semi-Final Results")
             if semi_final_pairings:
-                st.subheader("Semi-Final Results")
                 for i, (team1, team2) in enumerate(semi_final_pairings):
                     if "Bye" not in (team1, team2):
-                        winner = st.selectbox(f"Winner of Semi-Final {i+1} ({team1} vs {team2}):", [team1, team2])
+                        winner = st.selectbox(
+                            f"Winner of Semi-Final {i + 1} ({team1} vs {team2}):",
+                            [team1, team2],
+                        )
                         semi_final_winners.append(winner)
                     else:
-                        semi_final_winners.append(team1 if team1 != "Bye" else team2)  # Add the non-"Bye" team
+                        semi_final_winners.append(
+                            team1 if team1 != "Bye" else team2
+                        )  # Add the non-"Bye" team
+            else:
+                st.write("N/A")
 
-
+            # Determine Finals
             final_pairing = determine_final_pairing(semi_final_winners)
-            pdf_buffer = create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts)
 
+            # Generate and Download PDF
+            pdf_buffer = create_pdf_layout(
+                team_assignments, semi_final_pairings, final_pairing, num_courts
+            )
             st.download_button(
                 label="Download Tournament Layout (PDF)",
                 data=pdf_buffer,
                 file_name="tournament_layout.pdf",
                 mime="application/pdf",
             )
+
+            # Display layout in Streamlit
+            st.subheader("Team Assignments:")
+            for court, teams in team_assignments.items():
+                st.write(f"Court {court}: {', '.join(teams)}")
 
             st.subheader("Semi-Final Pairings:")
             if semi_final_pairings:
