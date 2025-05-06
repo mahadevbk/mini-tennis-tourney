@@ -104,48 +104,27 @@ def main():
     """
     st.title("Tennis Tournament Generator")
 
-    # Initialize session state variables
-    if 'generate_tournament' not in st.session_state:
-        st.session_state.generate_tournament = False
-    if 'team_assignments' not in st.session_state:
-        st.session_state.team_assignments = {}
-    if 'num_courts' not in st.session_state:
-        st.session_state.num_courts = 0
-    if 'num_teams' not in st.session_state:
-        st.session_state.num_teams = 0
-
     num_teams = st.number_input("Number of Teams (8-16):", min_value=8, max_value=16, value=8)
     num_courts = st.number_input("Number of Courts (2-4):", min_value=2, max_value=4, value=2)
-    
-    st.session_state.num_courts = num_courts
-    st.session_state.num_teams = num_teams
 
     if st.button("Generate Tournament"):
-        st.session_state.generate_tournament = True
         team_assignments, error_message = generate_tournament_layout(num_teams, num_courts)
         if error_message:
             st.error(error_message)
-            st.session_state.generate_tournament = False # added to prevent errors
         else:
-            st.session_state.team_assignments = team_assignments
+            st.success("Tournament layout generated successfully!")
+            pdf_buffer = create_pdf_layout(team_assignments, num_courts)
+            st.download_button(
+                label="Download Tournament Layout (PDF)",
+                data=pdf_buffer,
+                file_name="tournament_layout.pdf",
+                mime="application/pdf",
+            )
 
-    if st.session_state.generate_tournament:
-        team_assignments = st.session_state.get("team_assignments", {})
-        if not team_assignments:
-            st.stop()
-        st.success("Tournament layout generated successfully!")
-        
-        pdf_buffer = create_pdf_layout(team_assignments, num_courts)
-        st.download_button(
-            label="Download Tournament Layout (PDF)",
-            data=pdf_buffer,
-            file_name="tournament_layout.pdf",
-            mime="application/pdf",
-        )
+            # Display layout in Streamlit
+            st.subheader("Team Assignments:")
+            for court, teams in team_assignments.items():
+                st.write(f"Court {court}: {', '.join(teams)}")
 
-        # Display layout in Streamlit
-        st.subheader("Team Assignments:")
-        for court, teams in team_assignments.items():
-            st.write(f"Court {court}: {', '.join(teams)}")
 if __name__ == "__main__":
     main()
