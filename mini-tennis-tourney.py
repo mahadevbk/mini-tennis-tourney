@@ -184,6 +184,10 @@ def main():
     """
     st.title("Tennis Tournament Generator")
 
+    # Clear session state at the beginning
+    for key in st.session_state.keys():
+        del st.session_state[key]
+
     num_teams = st.number_input("Number of Teams (8-16):", min_value=8, max_value=16, value=8)
     num_courts = st.number_input("Number of Courts (2-4):", min_value=2, max_value=4, value=2)
 
@@ -257,7 +261,6 @@ def main():
                 )
                 st.download_button(
                     label="Download Tournament Layout (PDF)",
-                    data=pdf_buffer,
                     file_name="tournament_layout.pdf",
                     mime="application/pdf",
                 )
