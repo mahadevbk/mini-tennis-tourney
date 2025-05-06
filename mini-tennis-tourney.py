@@ -51,6 +51,8 @@ def generate_tournament_layout(num_teams, num_courts):
 
     return team_assignments, error_message
 
+
+
 def determine_semi_finals(court_winners):
     """
     Determines the semi-final pairings based on the winners of each court.
@@ -70,6 +72,8 @@ def determine_semi_finals(court_winners):
         semi_final_pairings = [(court_winners[0], court_winners[1]), (court_winners[2], court_winners[3])]
     return semi_final_pairings
 
+
+
 def determine_final_pairing(semi_final_winners):
     """
     Determines the final match pairing based on the winners of the semi-finals.
@@ -84,6 +88,8 @@ def determine_final_pairing(semi_final_winners):
         return (semi_final_winners[0], semi_final_winners[1])
     else:
         return ()
+
+
 
 def create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts):
     """
@@ -207,12 +213,13 @@ def main():
             semi_final_winners = []
             if semi_final_pairings:
                 st.subheader("Semi-Final Results")
-                for i, pairing in enumerate(semi_final_pairings):
-                    if "Bye" not in pairing:
-                        winner = st.selectbox(f"Winner of Semi-Final {i+1} ({pairing[0]} vs {pairing[1]}):", [pairing[0], pairing[1]])
+                for i, (team1, team2) in enumerate(semi_final_pairings):
+                    if "Bye" not in (team1, team2):
+                        winner = st.selectbox(f"Winner of Semi-Final {i+1} ({team1} vs {team2}):", [team1, team2])
                         semi_final_winners.append(winner)
                     else:
-                        semi_final_winners.append(pairing[0])
+                        semi_final_winners.append(team1 if team1 != "Bye" else team2)  # Add the non-"Bye" team
+
 
             final_pairing = determine_final_pairing(semi_final_winners)
             pdf_buffer = create_pdf_layout(team_assignments, semi_final_pairings, final_pairing, num_courts)
