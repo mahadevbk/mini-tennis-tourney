@@ -9,7 +9,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # Register a custom font (for example, 'Arial')
-pdfmetrics.registerFont(TTFont('Arial', 'Arial.ttf'))  #  Make sure 'Arial.ttf' is in the same directory or specify the correct path.
+pdfmetrics.registerFont(TTFont('Arial', 'CoveredByYourGrace-Regular.ttf'))  #  Make sure 'CoveredByYourGrace-Regular.ttf' is in the same directory or specify the correct path.
 
 def generate_tournament_layout(num_teams, num_courts):
     """
@@ -196,3 +196,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
